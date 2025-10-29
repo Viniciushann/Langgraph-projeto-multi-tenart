@@ -1,0 +1,161 @@
+name: Deploy to Hetzner
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  DEPLOY_PATH: /opt/whatsapp-bot
+
+jobs:
+  deploy:
+    name: Deploy WhatsApp Bot
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 🔑 Configure SSH
+      run: |
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+    - name: 🚀 Deploy to Server
+      run: |
+        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'ENDSSH'
+        set -e
+
+        echo "🚀 Starting deployment..."
+
+        # Navegar para diretório do projeto
+        cd /opt/whatsapp-bot
+
+        # Atualizar código do Git
+        echo "📥 Pulling latest changes from GitHub..."
+        git fetch --all
+        git reset --hard origin/main
+        git pull origin main
+
+        # Mostrar commit atual
+        echo "📍 Current commit:"
+        git log -1 --oneline
+
+        # Criar arquivo .env com as variáveis de ambiente
+        echo "📝 Creating .env file..."
+        cat > .env << ENVEOF
+        WHATSAPP_API_URL=https://evolution.centrooestedrywalldry.com.br
+        WHATSAPP_API_KEY=${{ secrets.WHATSAPP_API_KEY }}
+        WHATSAPP_INSTANCE=Centro_oeste_draywal
+        OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+        SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}
+        POSTGRES_CONNECTION_STRING=${{ secrets.POSTGRES_CONNECTION_STRING }}
+        REDIS_HOST=redis_redis
+        REDIS_PORT=6379
+        SECRET_KEY=${{ secrets.SECRET_KEY }}
+        ADMIN_TOKEN=${{ secrets.ADMIN_TOKEN }}
+        DOMAIN=bot.automacaovn.shop
+        ENVIRONMENT=production
+        PORT=8000
+        HOST=0.0.0.0
+        LOG_LEVEL=INFO
+        BOT_PHONE_NUMBER=556292745972
+        MESSAGE_GROUP_DELAY=25
+        GOOGLE_CALENDAR_CREDENTIALS_FILE=/app/credentials.json
+        GOOGLE_CALENDAR_ID=centrooestedrywalldry@gmail.com
+        CORS_ORIGINS=https://evolution.centrooestedrywalldry.com.br,https://bot.automacaovn.shop
+        ENVEOF
+
+        # Criar credenciais do Google Calendar
+        echo "🔑 Creating Google Calendar credentials..."
+        printf '%s' "${{ secrets.GOOGLE_CALENDAR_CREDENTIALS_BASE64 }}" | base64 -d > credentials.json
+
+        # Remover token.json se for diretório e criar arquivo vazio
+        echo "📝 Setting up token.json..."
+        rm -rf token.json
+        echo "{}" > token.json
+
+        # Build da imagem Docker
+        echo "🔨 Building Docker image..."
+        docker build -t whatsapp-bot-langchain:latest .
+
+        # Deploy via Docker Stack (Swarm mode)
+        echo "🚀 Deploying to Docker Swarm..."
+        docker stack rm whatsapp-bot 2>/dev/null || true
+        sleep 5
+
+        # Exportar variáveis para o docker stack
+        export WHATSAPP_API_KEY='${{ secrets.WHATSAPP_API_KEY }}'
+        export OPENAI_API_KEY='${{ secrets.OPENAI_API_KEY }}'
+        export SUPABASE_URL='${{ secrets.SUPABASE_URL }}'
+        export SUPABASE_KEY='${{ secrets.SUPABASE_KEY }}'
+        export POSTGRES_CONNECTION_STRING='${{ secrets.POSTGRES_CONNECTION_STRING }}'
+        export SECRET_KEY='${{ secrets.SECRET_KEY }}'
+        export ADMIN_TOKEN='${{ secrets.ADMIN_TOKEN }}'
+
+        docker stack deploy -c docker-compose.swarm.yml whatsapp-bot
+
+        # Aguardar container iniciar
+        echo "⏳ Waiting for container to start..."
+        sleep 15
+
+        # Verificar status do stack
+        echo "📊 Stack status:"
+        docker stack ps whatsapp-bot
+
+        echo ""
+        echo "🔍 Service status:"
+        docker stack services whatsapp-bot
+
+        # Aguardar serviço ficar pronto
+        echo ""
+        echo "⏳ Waiting for service to be ready..."
+        sleep 10
+
+        # Verificar se serviço está rodando
+        SERVICE_ID=$(docker service ps whatsapp-bot_whatsapp-bot -q --filter "desired-state=running" | head -n 1)
+
+        if [ -n "$SERVICE_ID" ]; then
+          echo "✅ Service is running!"
+
+          # Health check
+          echo "🏥 Checking health..."
+          if curl -f http://localhost:8000/health; then
+            echo "✅ Health check passed!"
+          else
+            echo "⚠️ Health check pending, but service is running"
+          fi
+
+          # Mostrar logs recentes
+          echo ""
+          echo "📋 Recent logs:"
+          docker service logs whatsapp-bot_whatsapp-bot --tail 20 --no-trunc
+
+          # Limpar imagens antigas
+          echo ""
+          echo "🧹 Cleaning up old images..."
+          docker image prune -f
+
+          echo ""
+          echo "🎉 Deployment complete!"
+        else
+          echo "❌ Service failed to start!"
+          docker service logs whatsapp-bot_whatsapp-bot --tail 50
+          exit 1
+        fi
+
+        ENDSSH
+
+    - name: ✅ Deployment Success
+      if: success()
+      run: |
+        echo "✅ Deploy realizado com sucesso!"
+        echo "🌐 Bot disponível em: https://bot.automacaovn.shop"
+
+    - name: ❌ Deployment Failed
+      if: failure()
+      run: |
+        echo "❌ Deploy falhou! Verifique os logs acima."
+        exit 1
