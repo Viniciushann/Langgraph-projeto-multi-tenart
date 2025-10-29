@@ -1,0 +1,70 @@
+name: Deploy PROD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Langcham-fluxo-atendimento/**'
+      - '.github/workflows/deploy-prod.yml'
+
+  workflow_dispatch:
+
+env:
+  DEPLOY_PATH: /root/Langcham-fluxo-atendimento
+
+jobs:
+  deploy:
+    name: Deploy to PROD Server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔑 Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: 📝 Add server to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: 🚀 Deploy to Server
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} -p ${{ secrets.SSH_PORT }} << 'ENDSSH'
+            set -e
+
+            echo "🔄 Atualizando código PROD..."
+            cd ${{ env.DEPLOY_PATH }}
+
+            git fetch origin
+            git reset --hard origin/main
+
+            echo "🐳 Buildando imagem Docker..."
+            docker build -t whatsapp-bot-langchain:latest .
+
+            echo "♻️ Atualizando serviço..."
+            docker service update --force whatsapp-bot_whatsapp-bot
+
+            echo "✅ Deploy PROD concluído!"
+
+            sleep 15
+
+            curl -f http://localhost:8000/health || echo "⚠️ Health check falhou"
+          ENDSSH
+
+      - name: 🔍 Verificar Deploy
+        run: |
+          sleep 10
+          response=$(curl -s https://bot.automacaovn.shop/health)
+          echo "Health check response: $response"
+
+          if echo "$response" | grep -q "healthy"; then
+            echo "✅ Deploy PROD verificado com sucesso!"
+          else
+            echo "❌ Health check PROD falhou"
+            exit 1
+          fi
