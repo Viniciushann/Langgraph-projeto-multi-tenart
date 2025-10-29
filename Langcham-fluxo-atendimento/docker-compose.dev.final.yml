@@ -1,0 +1,118 @@
+version: '3.8'
+
+services:
+  whatsapp-bot-dev:
+    image: whatsapp-bot-langchain:dev
+
+    environment:
+      # WhatsApp / Evolution API
+      - WHATSAPP_API_URL=https://evolution.centrooestedrywalldry.com.br
+      - WHATSAPP_API_KEY=8773E1C40430-4626-B896-1302789BA4D9
+      - WHATSAPP_INSTANCE=Centro_oeste_draywal_DEV
+
+      # OpenAI
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+
+      # Supabase
+      - SUPABASE_URL=https://znyypdwnqdlvqwwvffzk.supabase.co
+      - SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpueXlwZHducWRsdnF3d3ZmZnprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk3NjE2MzgsImV4cCI6MjA3NTMzNzYzOH0.iKzAS6qHOHXPJ6aXQ3lmaoAvvp1VQmizDHDVvWLzdMA
+
+      # Redis - ⚠️ USAR DB 1 PARA DEV (Produção usa 0)
+      - REDIS_HOST=redis_redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - REDIS_DB=1
+
+      # PostgreSQL
+      - POSTGRES_CONNECTION_STRING=postgresql://postgres:FBB1qGOo1wtlKBk2@db.znyypdwnqdlvqwwvffzk.supabase.co:5432/postgres?sslmode=require
+
+      # Google Calendar
+      - GOOGLE_CALENDAR_CREDENTIALS_FILE=/app/credentials.json
+
+      # Bot Configuration
+      - BOT_PHONE_NUMBER=5562999999999
+      - MESSAGE_GROUP_DELAY=10
+      - MAX_FRAGMENT_SIZE=300
+      - AGENT_TIMEOUT=60
+      - MAX_RETRIES=3
+      - ENABLE_MEMORY_PERSISTENCE=True
+
+      # Server Configuration
+      - ENVIRONMENT=development
+      - PORT=8001
+      - HOST=0.0.0.0
+      - LOG_LEVEL=DEBUG
+
+      # Security
+      - SECRET_KEY=dev-secret-key-apenas-para-desenvolvimento-nao-usar-em-producao
+
+      # CORS
+      - CORS_ORIGINS=*
+
+    volumes:
+      - whatsapp-bot-dev-logs:/app/logs
+
+    networks:
+      - viniciushannnet
+
+    deploy:
+      labels:
+        # Traefik - Habilitar
+        - "traefik.enable=true"
+
+        # Traefik - Router HTTP (Redirect para HTTPS)
+        - "traefik.http.routers.whatsapp-bot-dev-http.rule=Host(`botdev.automacaovn.shop`)"
+        - "traefik.http.routers.whatsapp-bot-dev-http.entrypoints=web"
+        - "traefik.http.routers.whatsapp-bot-dev-http.middlewares=redirect-to-https-dev"
+
+        # Traefik - Router HTTPS
+        - "traefik.http.routers.whatsapp-bot-dev.rule=Host(`botdev.automacaovn.shop`)"
+        - "traefik.http.routers.whatsapp-bot-dev.entrypoints=websecure"
+        - "traefik.http.routers.whatsapp-bot-dev.tls.certresolver=letsencrypt"
+
+        # Traefik - Service
+        - "traefik.http.services.whatsapp-bot-dev.loadbalancer.server.port=8001"
+
+        # Traefik - Network
+        - "traefik.docker.network=viniciushannnet"
+
+        # Traefik - Middleware (Redirect HTTP → HTTPS)
+        - "traefik.http.middlewares.redirect-to-https-dev.redirectscheme.scheme=https"
+        - "traefik.http.middlewares.redirect-to-https-dev.redirectscheme.permanent=true"
+
+      # Deployment Configuration
+      replicas: 1
+
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        monitor: 30s
+        order: start-first
+
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+
+      # Resources - Menores que produção
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+networks:
+  viniciushannnet:
+    external: true
+
+volumes:
+  whatsapp-bot-dev-logs:
+    driver: local

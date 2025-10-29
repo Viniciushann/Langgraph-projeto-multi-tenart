@@ -1,0 +1,110 @@
+version: '3.8'
+
+services:
+  whatsapp-bot-dev:
+    image: whatsapp-bot-langchain:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: whatsapp-bot-dev
+    restart: unless-stopped
+
+    # Variáveis de ambiente
+    environment:
+      # Evolution API
+      - WHATSAPP_API_URL=${WHATSAPP_API_URL}
+      - WHATSAPP_API_KEY=${WHATSAPP_API_KEY}
+      - WHATSAPP_INSTANCE=${WHATSAPP_INSTANCE}
+
+      # OpenAI
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+
+      # Supabase DEV
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+
+      # Redis (mesmo servidor, DB diferente)
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=1
+
+      # PostgreSQL (Supabase DEV)
+      - POSTGRES_CONNECTION_STRING=${POSTGRES_CONNECTION_STRING}
+
+      # Google Calendar
+      - GOOGLE_CALENDAR_CREDENTIALS_FILE=/app/credentials.json
+
+      # Configurações do Bot
+      - BOT_PHONE_NUMBER=${BOT_PHONE_NUMBER}
+      - MESSAGE_GROUP_DELAY=${MESSAGE_GROUP_DELAY:-10}
+      - MAX_FRAGMENT_SIZE=${MAX_FRAGMENT_SIZE:-300}
+
+      # Configurações do Agente
+      - AGENT_TIMEOUT=${AGENT_TIMEOUT:-60}
+      - MAX_RETRIES=${MAX_RETRIES:-3}
+      - ENABLE_MEMORY_PERSISTENCE=${ENABLE_MEMORY_PERSISTENCE:-True}
+
+      # Aplicação
+      - ENVIRONMENT=development
+      - PORT=8001
+      - HOST=0.0.0.0
+      - LOG_LEVEL=DEBUG
+
+      # Segurança
+      - SECRET_KEY=${SECRET_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+
+    # Volumes
+    volumes:
+      - ./credentials.json:/app/credentials.json:ro
+      - ./token.json:/app/token.json
+      - whatsapp-bot-dev-logs:/app/logs
+
+    # Portas
+    ports:
+      - "8001:8001"
+
+    # Networks (usar as mesmas do servidor)
+    networks:
+      - traefik-public
+      - redis_default
+
+    # Labels para Traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whatsapp-bot-dev.rule=Host(`botdev.${DOMAIN}`)"
+      - "traefik.http.routers.whatsapp-bot-dev.entrypoints=websecure"
+      - "traefik.http.routers.whatsapp-bot-dev.tls.certresolver=letsencrypt"
+      - "traefik.http.services.whatsapp-bot-dev.loadbalancer.server.port=8001"
+      - "traefik.docker.network=traefik-public"
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Recursos (menores que produção)
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+# Networks (usar as existentes)
+networks:
+  traefik-public:
+    external: true
+  redis_default:
+    external: true
+
+# Volumes
+volumes:
+  whatsapp-bot-dev-logs:
+    driver: local
