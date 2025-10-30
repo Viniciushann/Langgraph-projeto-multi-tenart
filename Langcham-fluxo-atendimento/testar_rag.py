@@ -1,7 +1,7 @@
 """
 Script para testar o sistema RAG do Supabase.
 
-Testa a busca vetorial usando a função match_documents.
+Testa a busca vetorial usando a função buscar_conhecimento_dev.
 """
 
 import asyncio
@@ -51,7 +51,7 @@ async def testar_rag():
             # 2. Buscar documentos similares
             print("  [2/3] Buscando documentos similares...")
             resultado = supabase.client.rpc(
-                "match_documents",
+                "buscar_conhecimento_dev",
                 {
                     "query_embedding": query_embedding,
                     "match_count": 3
@@ -86,30 +86,30 @@ async def testar_rag():
 
 
 async def verificar_funcao():
-    """Verifica se a função match_documents existe."""
+    """Verifica se a função buscar_conhecimento_dev existe."""
 
     settings = get_settings()
     supabase = criar_supabase_client(settings.supabase_url, settings.supabase_key)
 
-    print("\n[INFO] Verificando função match_documents...")
+    print("\n[INFO] Verificando função buscar_conhecimento_dev...")
 
     try:
         # Tentar chamar a função com parâmetros vazios
         resultado = supabase.client.rpc(
-            "match_documents",
+            "buscar_conhecimento_dev",
             {
                 "query_embedding": [0.0] * 1536,
                 "match_count": 1
             }
         ).execute()
 
-        print("[OK] Função match_documents existe e está acessível!\n")
+        print("[OK] Função buscar_conhecimento_dev existe e está acessível!\n")
         return True
 
     except Exception as e:
         error_msg = str(e)
         if "PGRST202" in error_msg or "Could not find" in error_msg:
-            print("[ERRO] Função match_documents NÃO encontrada!")
+            print("[ERRO] Função buscar_conhecimento_dev NÃO encontrada!")
             print("[AÇÃO] Execute o script setup_rag_supabase.sql no Supabase\n")
             return False
         else:
