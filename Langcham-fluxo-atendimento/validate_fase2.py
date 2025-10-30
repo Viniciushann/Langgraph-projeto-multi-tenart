@@ -11,7 +11,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from src.core.tenant_resolver import TenantResolver
 from src.core.feature_manager import FeatureManager
-from src.clients.supabase_client import SupabaseClient
+from src.clients.supabase_client import criar_supabase_client
+from src.core.config import get_settings
 
 async def validar():
     print("=" * 70)
@@ -22,7 +23,8 @@ async def validar():
     try:
         # Inicializar clientes
         print("📡 Inicializando cliente Supabase...")
-        supabase = SupabaseClient()
+        settings = get_settings()
+        supabase = criar_supabase_client(url=settings.supabase_url, key=settings.supabase_key)
         resolver = TenantResolver(supabase)
         print("✓ Cliente inicializado\n")
 

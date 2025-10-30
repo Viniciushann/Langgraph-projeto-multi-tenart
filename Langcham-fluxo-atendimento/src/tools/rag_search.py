@@ -9,7 +9,7 @@ import logging
 from typing import Dict, Any
 from langchain.tools import tool
 
-from src.clients.supabase_client import SupabaseClient
+from src.clients.supabase_client import criar_supabase_client
 from src.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -79,7 +79,7 @@ def criar_tool_busca_rag(tenant_context: Dict[str, Any]):
             logger.info(f"[{tenant_nome}] Buscando na base: '{query[:50]}...'")
 
             # Criar cliente Supabase
-            supabase = SupabaseClient(
+            supabase = criar_supabase_client(
                 url=settings.supabase_url,
                 key=settings.supabase_key
             )
