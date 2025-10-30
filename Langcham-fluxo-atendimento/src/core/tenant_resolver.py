@@ -41,9 +41,12 @@ class TenantResolver:
         """
         try:
             # Buscar tenant principal
-            response = self.supabase.client.table("tenants").select("*").eq("whatsapp_numero", whatsapp_numero).eq("ativo", True).maybe_single().execute()
-            if response.data:
-                return TenantModel(**response.data)
+            response = self.supabase.client.table("tenants").select("*").eq("whatsapp_numero", whatsapp_numero).eq("ativo", True).execute()
+
+            # Verificar se response é válido e tem dados
+            if response and response.data and len(response.data) > 0:
+                return TenantModel(**response.data[0])
+
             # Buscar em tenant_phone_numbers (não implementado)
             return None
         except Exception as e:
@@ -70,9 +73,9 @@ class TenantResolver:
 
     async def _carregar_features(self, tenant_id: UUID) -> Optional[TenantFeaturesModel]:
         try:
-            response = self.supabase.client.table("tenant_features").select("*").eq("tenant_id", str(tenant_id)).maybe_single().execute()
-            if response.data:
-                return TenantFeaturesModel(**response.data)
+            response = self.supabase.client.table("tenant_features").select("*").eq("tenant_id", str(tenant_id)).execute()
+            if response and response.data and len(response.data) > 0:
+                return TenantFeaturesModel(**response.data[0])
             return None
         except Exception as e:
             logger.error(f"Erro ao carregar features: {e}", exc_info=True)
@@ -80,9 +83,9 @@ class TenantResolver:
 
     async def _carregar_prompts(self, tenant_id: UUID) -> Optional[TenantPromptsModel]:
         try:
-            response = self.supabase.client.table("tenant_prompts").select("*").eq("tenant_id", str(tenant_id)).maybe_single().execute()
-            if response.data:
-                return TenantPromptsModel(**response.data)
+            response = self.supabase.client.table("tenant_prompts").select("*").eq("tenant_id", str(tenant_id)).execute()
+            if response and response.data and len(response.data) > 0:
+                return TenantPromptsModel(**response.data[0])
             return None
         except Exception as e:
             logger.error(f"Erro ao carregar prompts: {e}", exc_info=True)
