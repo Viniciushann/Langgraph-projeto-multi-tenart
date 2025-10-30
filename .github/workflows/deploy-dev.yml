@@ -59,7 +59,7 @@ jobs:
       - name: 🔍 Verificar Deploy
         run: |
           sleep 5
-          response=$(curl -s https://botdev.automacaovn.shop/health)
+          response=$(curl -s -k https://botdev.automacaovn.shop/health)
           echo "Health check response: $response"
 
           if echo "$response" | grep -q "healthy"; then
