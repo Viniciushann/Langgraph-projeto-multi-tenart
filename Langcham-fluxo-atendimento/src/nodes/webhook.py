@@ -98,15 +98,17 @@ async def validar_webhook(state: AgentState) -> AgentState:
         cliente_numero = extrair_numero_whatsapp(remote_jid)
 
         # ===== TENANT RESOLVER (novo) =====
-        supabase_client = SupabaseClient()
-        tenant_resolver = TenantResolver(supabase_client)
-        tenant_context = await tenant_resolver.identificar_tenant(cliente_numero)
+        # Instancia Supabase pelo factory existente
+        supabase = criar_supabase_client(url=settings.supabase_url, key=settings.supabase_key)
+        tenant_resolver = TenantResolver(supabase)
+        # Identificar pelo número que RECEBEU a mensagem (o número do bot)
+        tenant_context = await tenant_resolver.identificar_tenant(settings.bot_phone_number)
         if not tenant_context:
-            logger.warning(f"Tenant não encontrado: {cliente_numero}")
-            state["erro"] = f"Tenant não encontrado para {cliente_numero}"
+            logger.warning(f"Tenant não encontrado para número: {settings.bot_phone_number}")
+            state["erro"] = f"Tenant não encontrado para {settings.bot_phone_number}"
             state["next_action"] = AcaoFluxo.END.value
             return state
-        logger.info(f"✓ Tenant identificado: {tenant_context.get('tenant_nome')}")
+        logger.info(f"✓ Tenant identificado: {tenant_context['tenant_nome']}")
         state["tenant_context"] = tenant_context
         # ===== FIM TENANT RESOLVER =====
 
@@ -329,7 +331,7 @@ async def cadastrar_cliente(state: AgentState) -> AgentState:
         logger.info(f"  ID: {state['cliente_id']}")
 
         # Próxima ação: voltar para verificar cliente (para confirmar cadastro)
-        state["next_action"] = AcaoFluxo.VERIFICAR_CLIENTE.value
+        state["next_action"] = AcaoFluxo.PROCESSAR_MIDIA.value
 
         logger.info(f"Próxima ação: {state['next_action']}")
         logger.info("Retornando para verificação do cliente recém-cadastrado...")
