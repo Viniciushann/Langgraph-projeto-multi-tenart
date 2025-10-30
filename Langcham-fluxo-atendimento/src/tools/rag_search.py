@@ -125,9 +125,9 @@ def criar_tool_busca_rag(tenant_context: Dict[str, Any]):
                 "ou você pode me fazer perguntas gerais sobre nossos serviços."
             )
 
-    # Adicionar metadados à tool
-    buscar_na_base_conhecimento.tenant_id = tenant_id
-    buscar_na_base_conhecimento.tenant_nome = tenant_nome
+    # Adicionar metadados à tool - REMOVIDO para evitar erro StructuredTool
+    # buscar_na_base_conhecimento.tenant_id = tenant_id
+    # buscar_na_base_conhecimento.tenant_nome = tenant_nome
 
     logger.info(f"✓ Tool de busca RAG criada para {tenant_nome}")
 
