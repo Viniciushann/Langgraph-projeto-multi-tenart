@@ -318,18 +318,39 @@ async def enviar_respostas(state: AgentState) -> AgentState:
         logger.info(f"Total de fragmentos a enviar: {total_fragmentos}")
 
         # ==============================================
-        # 2. INSTANCIAR WHATSAPP CLIENT
+        # 2. OBTER CONFIGURAÇÕES (TENANT OU FALLBACK)
+        # ==============================================
+        tenant_context = state.get("tenant_context")
+
+        if tenant_context:
+            # Usar configurações do tenant
+            api_url = tenant_context.get("evolution_api_url") or settings.whatsapp_api_url
+            api_key = tenant_context.get("evolution_api_key") or settings.whatsapp_api_key
+            instance = tenant_context.get("whatsapp_sender_id") or settings.whatsapp_instance
+            tenant_nome = tenant_context.get("tenant_nome", "Tenant")
+
+            logger.info(f"✓ Usando configurações do tenant: {tenant_nome}")
+        else:
+            # Fallback para configurações globais
+            api_url = settings.whatsapp_api_url
+            api_key = settings.whatsapp_api_key
+            instance = settings.whatsapp_instance
+
+            logger.warning("⚠️ tenant_context não encontrado - usando configurações globais")
+
+        # ==============================================
+        # 3. INSTANCIAR WHATSAPP CLIENT
         # ==============================================
         whatsapp = WhatsAppClient(
-            base_url=settings.whatsapp_api_url,
-            api_key=settings.whatsapp_api_key,
-            instance=settings.whatsapp_instance
+            base_url=api_url,
+            api_key=api_key,
+            instance=instance
         )
 
         logger.info("WhatsAppClient inicializado")
 
         # ==============================================
-        # 3. ENVIAR FRAGMENTOS
+        # 4. ENVIAR FRAGMENTOS
         # ==============================================
         intervalo_entre_mensagens = 1.5  # segundos
 
@@ -340,7 +361,7 @@ async def enviar_respostas(state: AgentState) -> AgentState:
             logger.info(f"Preview: {fragmento[:100]}...")
 
             # ==============================================
-            # 3.1 ENVIAR STATUS "DIGITANDO"
+            # 4.1 ENVIAR STATUS "DIGITANDO"
             # ==============================================
             try:
                 await whatsapp.enviar_status_typing(cliente_numero)
@@ -353,12 +374,12 @@ async def enviar_respostas(state: AgentState) -> AgentState:
             await asyncio.sleep(0.5)
 
             # ==============================================
-            # 3.2 LIMPAR MENSAGEM
+            # 4.2 LIMPAR MENSAGEM
             # ==============================================
             mensagem_limpa = limpar_mensagem(fragmento)
 
             # ==============================================
-            # 3.3 ENVIAR MENSAGEM (COM RETRY)
+            # 4.3 ENVIAR MENSAGEM (COM RETRY)
             # ==============================================
             max_tentativas = 3
             tentativa = 0
@@ -401,14 +422,14 @@ async def enviar_respostas(state: AgentState) -> AgentState:
                 # Continua para próximo fragmento ao invés de parar tudo
 
             # ==============================================
-            # 3.4 AGUARDAR INTERVALO NATURAL
+            # 4.4 AGUARDAR INTERVALO NATURAL
             # ==============================================
             if i < total_fragmentos:  # Não espera após última mensagem
                 logger.info(f"Aguardando {intervalo_entre_mensagens}s antes do próximo fragmento...")
                 await asyncio.sleep(intervalo_entre_mensagens)
 
         # ==============================================
-        # 4. ESTATÍSTICAS FINAIS
+        # 5. ESTATÍSTICAS FINAIS
         # ==============================================
         tempo_total = (datetime.now() - inicio).total_seconds()
 
@@ -423,7 +444,7 @@ async def enviar_respostas(state: AgentState) -> AgentState:
         logger.info("=" * 60)
 
         # ==============================================
-        # 5. ATUALIZAR ESTADO
+        # 6. ATUALIZAR ESTADO
         # ==============================================
         state["next_action"] = AcaoFluxo.END.value
 

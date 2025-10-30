@@ -27,7 +27,10 @@ from src.models.state import AgentState, AcaoFluxo
 from src.config.settings import get_settings
 from src.clients.supabase_client import get_supabase_client
 from src.tools.scheduling import agendamento_tool
+from src.tools.scheduling_multitenant import criar_tool_agendamento
 from src.tools.contact_tech import contatar_tecnico_tool
+from src.core.feature_manager import FeatureManager
+from src.tools.rag_search import criar_tool_busca_rag
 
 # Configuração de logging
 logger = logging.getLogger(__name__)
@@ -40,9 +43,18 @@ settings = get_settings()
 # CONFIGURAÇÃO DO LLM
 # ==============================================
 
-def _get_llm() -> ChatOpenAI:
+def _get_llm(
+    model: str = "gpt-4o-2024-11-20",
+    temperature: float = 0.9,
+    max_tokens: int = 1000
+) -> ChatOpenAI:
     """
-    Retorna instância configurada do ChatOpenAI.
+    Retorna instância configurada do ChatOpenAI com parâmetros dinâmicos.
+
+    Args:
+        model: Modelo do OpenAI (ex: gpt-4o, gpt-4o-mini)
+        temperature: Temperatura (0.0 a 1.0)
+        max_tokens: Máximo de tokens na resposta
 
     Returns:
         ChatOpenAI: LLM configurado para o agente
@@ -54,15 +66,16 @@ def _get_llm() -> ChatOpenAI:
         raise ValueError("OPENAI_API_KEY não configurada")
 
     llm = ChatOpenAI(
-        model="gpt-4o-2024-11-20",
-        temperature=0.9,
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
         streaming=True,
         timeout=settings.agent_timeout,
         max_retries=settings.max_retries,
         api_key=settings.openai_api_key
     )
 
-    logger.info(f"LLM configurado: {llm.model_name}, temperatura: {llm.temperature}")
+    logger.info(f"LLM configurado: {llm.model_name}, temp={temperature}, max_tokens={max_tokens}")
     return llm
 
 
@@ -482,6 +495,67 @@ Lembre-se: Você representa a empresa. Seja profissional, prestativa e eficiente
     return system_prompt
 
 
+def _get_system_prompt_from_tenant(
+    tenant_context: Dict[str, Any],
+    cliente_nome: str = "Cliente",
+    telefone_cliente: str = ""
+) -> str:
+    """
+    Retorna system prompt personalizado do tenant.
+
+    Args:
+        tenant_context: Contexto completo do tenant
+        cliente_nome: Nome do cliente
+        telefone_cliente: Telefone do cliente
+
+    Returns:
+        str: System prompt personalizado
+    """
+    # Obter dados do tenant
+    system_prompt_base = tenant_context.get("system_prompt", "")
+    nome_assistente = tenant_context.get("nome_assistente", "Assistente")
+    tenant_nome = tenant_context.get("tenant_nome", "Empresa")
+
+    # Se multi-profissional, adicionar lista
+    if tenant_context.get("feature_multi_profissional", False):
+        profissionais = tenant_context.get("profissionais", [])
+        if profissionais:
+            prof_info = "\n\n<profissionais_disponiveis>\n"
+            for prof in profissionais:
+                nome = prof.get("nome_exibicao", prof.get("nome_completo"))
+                especialidade = prof.get("especialidade_principal", "")
+                prof_info += f"- {nome}: {especialidade}\n"
+            prof_info += "</profissionais_disponiveis>\n"
+            system_prompt_base += prof_info
+
+    # Adicionar contexto do cliente atual
+    agora = datetime.now()
+    data_hora_atual = agora.strftime('%d/%m/%Y %H:%M:%S')
+
+    system_prompt = f"""{system_prompt_base}
+
+<contexto_cliente_atual>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️  DADOS REAIS DO CLIENTE DESTA CONVERSA ⚠️
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+👤 Nome: {cliente_nome}
+📱 Telefone: {telefone_cliente}
+
+🔴 REGRA CRÍTICA - AGENDAMENTOS:
+Quando usar ferramentas de agendamento, SEMPRE use:
+- nome_cliente="{cliente_nome}"
+- telefone_cliente="{telefone_cliente}"
+
+📌 Data e hora atuais: {data_hora_atual}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+</contexto_cliente_atual>
+"""
+
+    logger.info(f"System prompt gerado para {tenant_nome} - Assistente: {nome_assistente}")
+    return system_prompt
+
+
 # ==============================================
 # CRIAÇÃO DO AGENTE
 # ==============================================
@@ -584,7 +658,25 @@ async def processar_agente(state: AgentState) -> AgentState:
 
     try:
         # ==============================================
-        # 1. VALIDAR ESTADO E OBTER TEXTO PROCESSADO
+        # 1. OBTER TENANT CONTEXT (MULTI-TENANT)
+        # ==============================================
+        tenant_context = state.get("tenant_context")
+
+        if not tenant_context:
+            logger.warning("⚠️ tenant_context não encontrado no state!")
+            logger.warning("Continuando sem multi-tenant (modo legado)")
+            tenant_context = None
+        else:
+            logger.info(f"✓ Tenant identificado: {tenant_context.get('tenant_nome')}")
+
+        # Criar FeatureManager se tenant_context existe
+        feature_manager = None
+        if tenant_context:
+            feature_manager = FeatureManager(tenant_context)
+            logger.info(f"✓ FeatureManager criado para tenant")
+
+        # ==============================================
+        # 2. VALIDAR ESTADO E OBTER TEXTO PROCESSADO
         # ==============================================
         # Verificar se há texto processado pelos nós de mídia
         texto_processado = state.get("texto_processado", "").strip()
@@ -638,25 +730,121 @@ async def processar_agente(state: AgentState) -> AgentState:
         logger.info(f"Entrada do usuário (primeiros 200 chars): {entrada_usuario[:200]}...")
 
         # ==============================================
-        # 3. CRIAR AGENTE COM DADOS DO CLIENTE
+        # 3. CONFIGURAR LLM COM PARÂMETROS DO TENANT
         # ==============================================
-        agent = await _create_agent(
-            cliente_nome=cliente_nome,
-            telefone_cliente=cliente_numero
+        if feature_manager:
+            modelo_llm = feature_manager.get_modelo_llm()
+            temperatura = feature_manager.get_temperatura()
+            max_tokens = feature_manager.get_max_tokens()
+            logger.info(f"Usando configs do tenant: {modelo_llm}, temp={temperatura}")
+        else:
+            # Fallback
+            modelo_llm = "gpt-4o-2024-11-20"
+            temperatura = 0.9
+            max_tokens = 1000
+            logger.info("Usando configs padrão (sem tenant)")
+
+        llm = _get_llm(
+            model=modelo_llm,
+            temperature=temperatura,
+            max_tokens=max_tokens
         )
-        
+
+        # ==============================================
+        # 4. FERRAMENTAS CONDICIONAIS
+        # ==============================================
+        tools = []
+
+        # RAG Tool (se habilitado)
+        if feature_manager and feature_manager.pode_usar_rag():
+            logger.info("✓ RAG habilitado para este tenant")
+            rag_tool = criar_tool_busca_rag(tenant_context)
+            tools.append(rag_tool)
+        elif not feature_manager:
+            # Fallback: usar RAG antigo
+            logger.info("Usando RAG legado (sem filtro de tenant)")
+            retriever_tool = _create_retriever_tool()
+            if retriever_tool:
+                tools.append(retriever_tool)
+
+        # Agendamento Tool (se habilitado)
+        if feature_manager and feature_manager.pode_usar_agendamento():
+            logger.info("✓ Agendamento habilitado para este tenant")
+
+            # Se multi-profissional, usar tool dinâmica
+            if feature_manager.tem_multi_profissional():
+                logger.info("✓ Multi-profissional habilitado - usando tool dinâmica")
+                agendamento_tool_tenant = criar_tool_agendamento(tenant_context)
+                tools.append(agendamento_tool_tenant)
+            else:
+                # Tenant sem multi-profissional, usar tool padrão
+                tools.append(agendamento_tool)
+        elif not feature_manager:
+            # Fallback: usar agendamento antigo
+            tools.append(agendamento_tool)
+
+        # Contato com técnico (sempre disponível)
+        tools.append(contatar_tecnico_tool)
+
+        logger.info(f"Agente configurado com {len(tools)} ferramentas")
+
+        # ==============================================
+        # 5. SYSTEM PROMPT (DINÂMICO OU LEGADO)
+        # ==============================================
+        if tenant_context:
+            system_prompt = _get_system_prompt_from_tenant(
+                tenant_context=tenant_context,
+                cliente_nome=cliente_nome,
+                telefone_cliente=cliente_numero
+            )
+        else:
+            # Fallback: usar prompt hardcoded
+            system_prompt = _get_system_prompt(
+                cliente_nome=cliente_nome,
+                telefone_cliente=cliente_numero
+            )
+
+        # ==============================================
+        # 6. SESSION ID POR TENANT (se multi-tenant)
+        # ==============================================
+        if tenant_context:
+            tenant_id = tenant_context.get("tenant_id")
+            session_id = f"tenant_{tenant_id}_client_{cliente_numero}"
+            logger.info(f"Session ID multi-tenant: {session_id}")
+        else:
+            session_id = cliente_numero
+            logger.info(f"Session ID legado: {session_id}")
+
+        # ==============================================
+        # 7. CRIAR CHAIN DO AGENTE
+        # ==============================================
+        # Vincular ferramentas ao LLM
+        llm_with_tools = llm.bind_tools(tools)
+
+        logger.info(f"LLM configurado com {len(tools)} ferramentas vinculadas")
+
+        # Criar chain com system prompt e tools
+        from langchain_core.prompts import ChatPromptTemplate
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("human", "{input}")
+        ])
+
+        agent = prompt | llm_with_tools
+
         logger.info("✅ Agente criado com dados do cliente injetados:")
         logger.info(f"   - Nome: {cliente_nome}")
         logger.info(f"   - Telefone: {cliente_numero}")
 
         # ==============================================
-        # 4. CARREGAR HISTÓRICO (se memória estiver habilitada)
+        # 8. CARREGAR HISTÓRICO (se memória estiver habilitada)
         # ==============================================
         mensagens_historico = []
 
         if settings.enable_memory_persistence:
             try:
-                history = _get_message_history(cliente_numero)
+                history = _get_message_history(session_id)
 
                 # Recupera últimas N mensagens do histórico
                 mensagens_historico = history.messages[-10:]  # Últimas 10 mensagens
@@ -689,12 +877,11 @@ async def processar_agente(state: AgentState) -> AgentState:
                 entrada_com_historico = entrada_usuario
 
             # Invocar agente com loop ReAct para tool calls
-            # Pegar as tools para executar
-            retriever_tool = _create_retriever_tool()
-            tools_dict = {
-                "buscar_base_conhecimento": retriever_tool,
-                "agendamento_tool": agendamento_tool
-            }
+            # Criar dicionário de tools para execução
+            tools_dict = {}
+            for tool in tools:
+                tool_name = tool.name if hasattr(tool, 'name') else str(tool)
+                tools_dict[tool_name] = tool
 
             # Loop ReAct: invocar LLM, executar tools, invocar novamente
             max_iterations = 3
@@ -804,11 +991,11 @@ async def processar_agente(state: AgentState) -> AgentState:
             state["next_action"] = AcaoFluxo.FRAGMENTAR_RESPOSTA.value
 
             # ==============================================
-            # 7. PERSISTIR HISTÓRICO
+            # 9. PERSISTIR HISTÓRICO
             # ==============================================
             if settings.enable_memory_persistence:
                 try:
-                    history = _get_message_history(cliente_numero)
+                    history = _get_message_history(session_id)
 
                     # Adiciona mensagem do usuário
                     history.add_user_message(entrada_usuario)
