@@ -13,6 +13,8 @@ from typing import Dict, Any
 from src.models.state import AgentState, AcaoFluxo, extrair_numero_whatsapp
 from src.clients.supabase_client import SupabaseClient, criar_supabase_client
 from src.config.settings import get_settings
+from src.core.tenant_resolver import TenantResolver
+from src.core.tenant_context import TenantContext
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +96,19 @@ async def validar_webhook(state: AgentState) -> AgentState:
 
         # Extrair número do cliente (remover @s.whatsapp.net)
         cliente_numero = extrair_numero_whatsapp(remote_jid)
+
+        # ===== TENANT RESOLVER (novo) =====
+        supabase_client = SupabaseClient()
+        tenant_resolver = TenantResolver(supabase_client)
+        tenant_context = await tenant_resolver.identificar_tenant(cliente_numero)
+        if not tenant_context:
+            logger.warning(f"Tenant não encontrado: {cliente_numero}")
+            state["erro"] = f"Tenant não encontrado para {cliente_numero}"
+            state["next_action"] = AcaoFluxo.END.value
+            return state
+        logger.info(f"✓ Tenant identificado: {tenant_context.get('tenant_nome')}")
+        state["tenant_context"] = tenant_context
+        # ===== FIM TENANT RESOLVER =====
 
         # Extrair conteúdo da mensagem
         message_obj = data.get("message", {})

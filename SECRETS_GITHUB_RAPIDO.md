@@ -55,6 +55,7 @@ ssh -i ~/.ssh/github_actions root@46.62.155.254
 Na página de Secrets do GitHub, clique em **"New repository secret"** e adicione:
 
 #### **Secret 1: SSH_PRIVATE_KEY**
+
 ```
 Name: SSH_PRIVATE_KEY
 Value: [Colar conteúdo de: cat ~/.ssh/github_actions]
@@ -66,48 +67,56 @@ Incluir TUDO:
 ```
 
 #### **Secret 2: SSH_HOST**
+
 ```
 Name: SSH_HOST
 Value: 46.62.155.254
 ```
 
 #### **Secret 3: SSH_USER**
+
 ```
 Name: SSH_USER
 Value: root
 ```
 
 #### **Secret 4: SSH_PORT**
+
 ```
 Name: SSH_PORT
 Value: 22
 ```
 
 #### **Secret 5: OPENAI_API_KEY**
+
 ```
 Name: OPENAI_API_KEY
 Value: [sua-chave-openai-aqui]
 ```
 
 #### **Secret 6: SUPABASE_URL**
+
 ```
 Name: SUPABASE_URL
 Value: https://wmzhbgcqugtctnzyinqw.supabase.co
 ```
 
 #### **Secret 7: SUPABASE_KEY**
+
 ```
 Name: SUPABASE_KEY
 Value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndtemhiZ2NxdWd0Y3RuenlpbnF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3NTQ5NDAsImV4cCI6MjA3NzMzMDk0MH0.pziIBNSJfex-dEJDJ0NeU7awjadoJXg87a8TONc4Xic
 ```
 
 #### **Secret 8: POSTGRES_CONNECTION_STRING**
+
 ```
 Name: POSTGRES_CONNECTION_STRING
 Value: postgresql://postgres:AcZgZs8oPTFsNQkU@db.wmzhbgcqugtctnzyinqw.supabase.co:5432/postgres?sslmode=require
 ```
 
 #### **Secret 9: WHATSAPP_API_KEY**
+
 ```
 Name: WHATSAPP_API_KEY
 Value: 8773E1C40430-4626-B896-1302789BA4D9
@@ -132,6 +141,7 @@ git commit -m "ci: adicionar GitHub Actions"
 
 # Push
 git push -u origin dev
+
 
 # Voltar para main
 git checkout main

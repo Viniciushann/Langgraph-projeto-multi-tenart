@@ -11,6 +11,7 @@ from typing import TypedDict, Annotated, Sequence, Optional, List, Dict, Any
 from langchain_core.messages import BaseMessage
 from enum import Enum
 import operator
+from src.core.tenant_context import TenantContext
 
 
 # ========== ENUMS ==========
@@ -139,6 +140,7 @@ class AgentState(TypedDict, total=False):
         next_action: Próxima ação a ser executada pelo grafo
         erro: Mensagem de erro (se houver)
         erro_detalhes: Detalhes adicionais do erro
+        tenant_context: Contexto do tenant (se identificado pelo webhook)
     """
 
     # ========== DADOS DO WEBHOOK ==========
@@ -182,6 +184,7 @@ class AgentState(TypedDict, total=False):
     next_action: str
     erro: Optional[str]
     erro_detalhes: Optional[Dict[str, Any]]
+    tenant_context: Optional[TenantContext]
 
 
 # ========== FUNÇÕES AUXILIARES ==========
@@ -225,7 +228,8 @@ def criar_estado_inicial() -> AgentState:
         agendamento_resultado=None,
         next_action="",
         erro=None,
-        erro_detalhes=None
+        erro_detalhes=None,
+        tenant_context=None
     )
 
 
