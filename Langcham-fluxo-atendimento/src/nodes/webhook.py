@@ -78,19 +78,32 @@ async def validar_webhook(state: AgentState) -> AgentState:
         message_type = data.get("messageType", "outros")
         message_timestamp = data.get("messageTimestamp", None)
 
+        # Extrair o número do bot (destinatário da mensagem)
+        # Deve vir no instanceData ou no owner
+        instance_data = body.get("instance", {})
+        instance_name = instance_data.get("instanceName", "")
+        owner = instance_data.get("owner", "")
+
         logger.info(f"Webhook recebido:")
         logger.info(f"  Remote JID: {remote_jid}")
         logger.info(f"  From Me: {from_me}")
         logger.info(f"  Message Type: {message_type}")
         logger.info(f"  Push Name: {push_name}")
+        logger.info(f"  Instance Name: {instance_name}")
+        logger.info(f"  Owner: {owner}")
 
-        # Carregar configurações para obter bot_phone_number
+        # Carregar configurações
         settings = get_settings()
-        bot_jid = f"{settings.bot_phone_number}@s.whatsapp.net"
+
+        # Extrair o número do bot (tenant) - usar owner se disponível, senão fallback para settings
+        bot_numero = extrair_numero_whatsapp(owner) if owner else settings.bot_phone_number
+        bot_jid = f"{bot_numero}@s.whatsapp.net"
+
+        logger.info(f"  Número do bot (tenant): {bot_numero}")
 
         # Filtrar mensagens do próprio bot
-        if remote_jid == bot_jid:
-            logger.info(f"Mensagem filtrada: é do próprio bot ({bot_jid})")
+        if from_me:
+            logger.info(f"Mensagem filtrada: foi enviada pelo bot (fromMe=True)")
             state["next_action"] = AcaoFluxo.END.value
             return state
 
@@ -101,11 +114,11 @@ async def validar_webhook(state: AgentState) -> AgentState:
         # Instancia Supabase pelo factory existente
         supabase = criar_supabase_client(url=settings.supabase_url, key=settings.supabase_key)
         tenant_resolver = TenantResolver(supabase)
-        # Identificar pelo número que RECEBEU a mensagem (o número do bot)
-        tenant_context = await tenant_resolver.identificar_tenant(settings.bot_phone_number)
+        # Identificar pelo número que RECEBEU a mensagem (o número do bot/tenant)
+        tenant_context = await tenant_resolver.identificar_tenant(bot_numero)
         if not tenant_context:
-            logger.warning(f"Tenant não encontrado para número: {settings.bot_phone_number}")
-            state["erro"] = f"Tenant não encontrado para {settings.bot_phone_number}"
+            logger.warning(f"Tenant não encontrado para número: {bot_numero}")
+            state["erro"] = f"Tenant não encontrado para {bot_numero}"
             state["next_action"] = AcaoFluxo.END.value
             return state
         logger.info(f"✓ Tenant identificado: {tenant_context['tenant_nome']}")
