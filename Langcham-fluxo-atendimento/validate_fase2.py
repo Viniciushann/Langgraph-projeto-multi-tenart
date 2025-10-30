@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 from src.core.tenant_resolver import TenantResolver
 from src.core.feature_manager import FeatureManager
 from src.clients.supabase_client import criar_supabase_client
-from src.core.config import get_settings
+from src.config.settings import get_settings
 
 async def validar():
     print("=" * 70)
