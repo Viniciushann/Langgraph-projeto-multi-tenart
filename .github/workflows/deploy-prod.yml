@@ -38,7 +38,7 @@ jobs:
             set -e
 
             echo "🔄 Atualizando código PROD..."
-            cd ${{ env.DEPLOY_PATH }}
+            cd /root/Langcham-fluxo-atendimento
 
             git fetch origin
             git reset --hard origin/main

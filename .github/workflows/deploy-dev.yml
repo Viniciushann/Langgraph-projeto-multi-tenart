@@ -38,7 +38,7 @@ jobs:
             set -e
 
             echo "🔄 Atualizando código..."
-            cd ${{ env.DEPLOY_PATH }}
+            cd /root/whatsapp-bot-dev/Langcham-fluxo-atendimento
 
             git fetch origin
             git reset --hard origin/dev
@@ -53,7 +53,7 @@ jobs:
 
             sleep 10
 
-            curl -f http://localhost:8001/health || echo "⚠️ Health check falhou"
+            curl -f http://localhost:8000/health || echo "⚠️ Health check falhou"
           ENDSSH
 
       - name: 🔍 Verificar Deploy
