@@ -160,7 +160,7 @@ class Settings(BaseSettings):
     )
 
     port: int = Field(
-        default=8000,
+        default=8001,
         description="Porta da aplicação FastAPI",
         ge=1000,
         le=65535
