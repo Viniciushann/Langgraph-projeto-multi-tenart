@@ -221,6 +221,110 @@ class SupabaseClient:
             logger.warning("Retornando lista vazia de documentos")
             return []
 
+    async def buscar_documentos_relevantes(
+        self,
+        query: str,
+        tenant_id: str,
+        limit: int = 5,
+        similarity_threshold: float = 0.7
+    ) -> List[Dict[str, Any]]:
+        """
+        Busca documentos relevantes usando RAG, FILTRADOS por tenant_id.
+
+        CRÍTICO: Este método garante isolamento de dados entre tenants,
+        permitindo que cada tenant veja apenas seus próprios documentos.
+
+        Args:
+            query: Texto da consulta (será convertido em embedding)
+            tenant_id: UUID do tenant (OBRIGATÓRIO para isolamento)
+            limit: Número máximo de documentos a retornar (default: 5)
+            similarity_threshold: Threshold de similaridade mínima (default: 0.7)
+
+        Returns:
+            Lista de documentos similares do tenant, com metadados e scores
+
+        Raises:
+            ValueError: Se query ou tenant_id estiverem vazios
+            Exception: Se houver erro na busca vetorial
+
+        Example:
+            >>> from openai import OpenAI
+            >>> # Gerar embedding da query
+            >>> openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
+            >>> response = openai_client.embeddings.create(
+            ...     model="text-embedding-3-small",
+            ...     input="preços de drywall"
+            ... )
+            >>> query_embedding = response.data[0].embedding
+            >>>
+            >>> # Buscar documentos filtrados por tenant
+            >>> docs = await client.buscar_documentos_relevantes(
+            ...     query=query_embedding,
+            ...     tenant_id="9605db82-51bf-4101-bdb0-ba73c5843c43",
+            ...     limit=3
+            ... )
+        """
+        if not query:
+            raise ValueError("Query não pode estar vazia")
+
+        if not tenant_id:
+            raise ValueError("tenant_id é obrigatório para isolamento de dados")
+
+        try:
+            logger.info(f"Buscando documentos RAG para tenant {tenant_id} (limit={limit}, threshold={similarity_threshold})")
+
+            # Gerar embedding da query usando OpenAI
+            try:
+                from openai import OpenAI
+                from src.config.settings import get_settings
+
+                settings = get_settings()
+                openai_client = OpenAI(api_key=settings.openai_api_key)
+
+                response = openai_client.embeddings.create(
+                    model="text-embedding-3-small",
+                    input=query
+                )
+
+                query_embedding = response.data[0].embedding
+                logger.info("Embedding da query gerado com sucesso")
+
+            except Exception as e:
+                logger.error(f"Erro ao gerar embedding: {e}")
+                raise ValueError(f"Falha ao gerar embedding da query: {e}")
+
+            # Chamar função RPC do Supabase com filtro de tenant
+            response = self.client.rpc(
+                "match_documents",
+                {
+                    "query_embedding": query_embedding,
+                    "match_threshold": similarity_threshold,
+                    "match_count": limit,
+                    "filter_tenant_id": tenant_id  # FILTRO OBRIGATÓRIO
+                }
+            ).execute()
+
+            documentos = response.data if response.data else []
+
+            logger.info(f"✓ Encontrados {len(documentos)} documentos do tenant {tenant_id}")
+
+            # Validar que todos os documentos retornados pertencem ao tenant correto
+            for doc in documentos:
+                doc_tenant_id = doc.get("tenant_id")
+                if doc_tenant_id and str(doc_tenant_id) != str(tenant_id):
+                    logger.error(f"VAZAMENTO DE DADOS DETECTADO! Documento {doc.get('id')} pertence ao tenant {doc_tenant_id}, não ao {tenant_id}")
+                    # Remover documentos de outros tenants (segurança adicional)
+                    documentos = [d for d in documentos if str(d.get("tenant_id")) == str(tenant_id)]
+                    break
+
+            return documentos
+
+        except Exception as e:
+            logger.error(f"Erro ao buscar documentos relevantes: {e}", exc_info=True)
+            # Retornar lista vazia ao invés de propagar erro
+            logger.warning("Retornando lista vazia de documentos")
+            return []
+
     async def atualizar_cliente(
         self,
         cliente_id: str,
