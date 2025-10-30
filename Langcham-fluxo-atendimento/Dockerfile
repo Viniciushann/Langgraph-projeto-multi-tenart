@@ -38,12 +38,12 @@ COPY . .
 # Criar diretórios necessários
 RUN mkdir -p /app/logs
 
-# Expor porta
-EXPOSE 8000
+# Expor portas (8000 e 8001 para dev)
+EXPOSE 8000 8001
 
-# Health check
+# Health check (usa variável PORT se disponível, senão 8000)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
-# Comando de inicialização
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# Comando de inicialização (usa variável PORT se disponível, senão 8000)
+CMD uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1
