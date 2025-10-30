@@ -331,7 +331,7 @@ async def cadastrar_cliente(state: AgentState) -> AgentState:
         logger.info(f"  ID: {state['cliente_id']}")
 
         # Próxima ação: voltar para verificar cliente (para confirmar cadastro)
-        state["next_action"] = AcaoFluxo.PROCESSAR_MIDIA.value
+        state["next_action"] = AcaoFluxo.VERIFICAR_CLIENTE.value
 
         logger.info(f"Próxima ação: {state['next_action']}")
         logger.info("Retornando para verificação do cliente recém-cadastrado...")

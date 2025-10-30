@@ -140,8 +140,8 @@ def _create_retriever_tool() -> Any:
         vectorstore = SupabaseVectorStore(
             client=supabase_client,
             embedding=embeddings,
-            table_name="conhecimento",
-            query_name="match_documents"
+            table_name="conhecimento_dev",
+            query_name="buscar_conhecimento_dev"
         )
 
         # Criar retriever como tool

@@ -80,11 +80,12 @@ class SupabaseClient:
         try:
             logger.info(f"Buscando cliente com telefone: {telefone}")
 
+            # Usar tabela clients_dev para ambiente DEV
             response = (
                 self.client
-                .table("leads")
+                .table("clients_dev")
                 .select("*")
-                .eq("phone_numero", telefone)
+                .eq("telefone", telefone)
                 .execute()
             )
 
@@ -134,20 +135,23 @@ class SupabaseClient:
                 raise ValueError(f"Campo obrigatório ausente: {campo}")
 
         try:
-            logger.info(f"Cadastrando cliente: {dados.get('nome_lead')} - {dados.get('phone_numero')}")
+            logger.info(f"Cadastrando cliente: {dados.get('nome')} - {dados.get('telefone')}")
 
-            # Mapear campos para a estrutura da tabela leads
-            dados_leads = {
-                "nome_Leed": dados.get("nome_lead"),
-                "phone_numero": dados.get("phone_numero"),
-                "message": dados.get("message"),
-                "wpp.TipoDeMensagem": dados.get("tipo_mensagem")
+            # Mapear campos para a estrutura da tabela clients_dev
+            dados_cliente = {
+                "nome": dados.get("nome_lead") or dados.get("nome"),
+                "telefone": dados.get("phone_numero") or dados.get("telefone"),
+                "empresa": dados.get("empresa"),
+                "dados_adicionais": {
+                    "message": dados.get("message"),
+                    "tipo_mensagem": dados.get("tipo_mensagem")
+                }
             }
 
             response = (
                 self.client
-                .table("leads")
-                .insert(dados_leads)
+                .table("clients_dev")
+                .insert(dados_cliente)
                 .execute()
             )
 
@@ -170,7 +174,7 @@ class SupabaseClient:
         """
         Busca documentos similares usando vector store para RAG.
 
-        Utiliza a função match_documents do Supabase que faz busca por
+        Utiliza a função buscar_conhecimento_dev do Supabase que faz busca por
         similaridade usando embeddings vetoriais.
 
         Args:
@@ -199,9 +203,9 @@ class SupabaseClient:
         try:
             logger.info(f"Buscando documentos RAG para: '{query[:50]}...' (limit={limit})")
 
-            # Chamar função RPC do Supabase para busca vetorial
+            # Chamar função RPC do Supabase para busca vetorial (ambiente DEV)
             response = self.client.rpc(
-                "match_documents",
+                "buscar_conhecimento_dev",
                 {
                     "query_embedding": query,
                     "match_count": limit
@@ -295,7 +299,7 @@ class SupabaseClient:
 
             # Chamar função RPC do Supabase com filtro de tenant
             response = self.client.rpc(
-                "match_documents",
+                "buscar_conhecimento_dev",
                 {
                     "query_embedding": query_embedding,
                     "match_threshold": similarity_threshold,
@@ -352,9 +356,10 @@ class SupabaseClient:
         try:
             logger.info(f"Atualizando cliente ID: {cliente_id}")
 
+            # Usar tabela clients_dev para ambiente DEV
             response = (
                 self.client
-                .table("leads")
+                .table("clients_dev")
                 .update(dados)
                 .eq("id", cliente_id)
                 .execute()
@@ -392,9 +397,10 @@ class SupabaseClient:
         try:
             logger.info(f"Listando clientes (limit={limit}, offset={offset})")
 
+            # Usar tabela clients_dev para ambiente DEV
             response = (
                 self.client
-                .table("leads")
+                .table("clients_dev")
                 .select("*")
                 .range(offset, offset + limit - 1)
                 .execute()

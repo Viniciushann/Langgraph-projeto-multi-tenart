@@ -134,8 +134,8 @@ def main():
     # 6. Verificar Clientes (migração)
     print("\n6️⃣ Verificando CLIENTES (migração)...")
     try:
-        clientes_migrados = supabase.table('clientes').select('id', count='exact').not_.is_('tenant_id', 'null').execute()
-        clientes_total = supabase.table('clientes').select('id', count='exact').execute()
+        clientes_migrados = supabase.table('clients_dev').select('id', count='exact').not_.is_('tenant_id', 'null').execute()
+        clientes_total = supabase.table('clients_dev').select('id', count='exact').execute()
         print(f"   ✅ {clientes_migrados.count}/{clientes_total.count} clientes com tenant_id")
 
         relatorio.append("### 6. Migração de Dados Existentes")
@@ -151,8 +151,8 @@ def main():
     # 7. Verificar Documents (migração)
     print("\n7️⃣ Verificando DOCUMENTS (migração)...")
     try:
-        docs_migrados = supabase.table('documents').select('id', count='exact').not_.is_('tenant_id', 'null').execute()
-        docs_total = supabase.table('documents').select('id', count='exact').execute()
+        docs_migrados = supabase.table('conhecimento_dev').select('id', count='exact').not_.is_('tenant_id', 'null').execute()
+        docs_total = supabase.table('conhecimento_dev').select('id', count='exact').execute()
         print(f"   ✅ {docs_migrados.count}/{docs_total.count} documentos com tenant_id")
 
         relatorio.append(f"**Documentos (RAG):**")
