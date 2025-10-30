@@ -254,10 +254,10 @@ def criar_tool_agendamento(tenant_context: Dict[str, Any]):
                 "dados": {}
             }
 
-    # Adicionar metadados à tool
-    agendar_consulta.tenant_id = tenant_id
-    agendar_consulta.tenant_nome = tenant_nome
-    agendar_consulta.tem_multi_prof = tem_multi_prof
+    # Adicionar metadados à tool - REMOVIDO para evitar erro StructuredTool
+    # agendar_consulta.tenant_id = tenant_id
+    # agendar_consulta.tenant_nome = tenant_nome
+    # agendar_consulta.tem_multi_prof = tem_multi_prof
 
     logger.info(f"✓ Tool de agendamento criada para {tenant_nome}")
 
