@@ -79,10 +79,20 @@ async def validar_webhook(state: AgentState) -> AgentState:
         message_timestamp = data.get("messageTimestamp", None)
 
         # Extrair o número do bot (destinatário da mensagem)
-        # Deve vir no instanceData ou no owner
+        # Pode vir em diferentes formatos: string ou objeto
         instance_data = body.get("instance", {})
-        instance_name = instance_data.get("instanceName", "")
-        owner = instance_data.get("owner", "")
+
+        # Se instance_data for string, é o nome da instância
+        if isinstance(instance_data, str):
+            instance_name = instance_data
+            owner = ""
+        # Se for dict, extrair os campos
+        elif isinstance(instance_data, dict):
+            instance_name = instance_data.get("instanceName", "")
+            owner = instance_data.get("owner", "")
+        else:
+            instance_name = ""
+            owner = ""
 
         logger.info(f"Webhook recebido:")
         logger.info(f"  Remote JID: {remote_jid}")
@@ -95,12 +105,6 @@ async def validar_webhook(state: AgentState) -> AgentState:
         # Carregar configurações
         settings = get_settings()
 
-        # Extrair o número do bot (tenant) - usar owner se disponível, senão fallback para settings
-        bot_numero = extrair_numero_whatsapp(owner) if owner else settings.bot_phone_number
-        bot_jid = f"{bot_numero}@s.whatsapp.net"
-
-        logger.info(f"  Número do bot (tenant): {bot_numero}")
-
         # Filtrar mensagens do próprio bot
         if from_me:
             logger.info(f"Mensagem filtrada: foi enviada pelo bot (fromMe=True)")
@@ -110,18 +114,27 @@ async def validar_webhook(state: AgentState) -> AgentState:
         # Extrair número do cliente (remover @s.whatsapp.net)
         cliente_numero = extrair_numero_whatsapp(remote_jid)
 
-        # ===== TENANT RESOLVER (novo) =====
+        # ===== TENANT RESOLVER =====
         # Instancia Supabase pelo factory existente
         supabase = criar_supabase_client(url=settings.supabase_url, key=settings.supabase_key)
         tenant_resolver = TenantResolver(supabase)
-        # Identificar pelo número que RECEBEU a mensagem (o número do bot/tenant)
-        tenant_context = await tenant_resolver.identificar_tenant(bot_numero)
+
+        # Identificar tenant: primeiro por owner (se disponível), senão por instance_name
+        bot_numero = extrair_numero_whatsapp(owner) if owner else None
+
+        logger.info(f"  Buscando tenant: numero={bot_numero}, instance={instance_name}")
+        tenant_context = await tenant_resolver.identificar_tenant(
+            whatsapp_numero=bot_numero,
+            instance_name=instance_name
+        )
+
         if not tenant_context:
-            logger.warning(f"Tenant não encontrado para número: {bot_numero}")
-            state["erro"] = f"Tenant não encontrado para {bot_numero}"
+            logger.warning(f"Tenant não encontrado: numero={bot_numero}, instance={instance_name}")
+            state["erro"] = f"Tenant não encontrado"
             state["next_action"] = AcaoFluxo.END.value
             return state
-        logger.info(f"✓ Tenant identificado: {tenant_context['tenant_nome']}")
+
+        logger.info(f"✓ Tenant identificado: {tenant_context['tenant_nome']} (numero={tenant_context['whatsapp_numero']})")
         state["tenant_context"] = tenant_context
         # ===== FIM TENANT RESOLVER =====
 

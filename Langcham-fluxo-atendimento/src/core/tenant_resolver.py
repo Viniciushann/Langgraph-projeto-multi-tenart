@@ -17,19 +17,31 @@ class TenantResolver:
         self.supabase = supabase_client
         self._cache: Dict[str, TenantContext] = {}
 
-    async def identificar_tenant(self, whatsapp_numero: str, usar_cache: bool = True) -> Optional[TenantContext]:
+    async def identificar_tenant(self, whatsapp_numero: str = None, instance_name: str = None, usar_cache: bool = True) -> Optional[TenantContext]:
         """
-        Identifica o tenant pelo número de WhatsApp e carrega todo contexto
+        Identifica o tenant pelo número de WhatsApp ou nome da instância e carrega todo contexto
         """
         try:
-            if usar_cache and whatsapp_numero in self._cache:
-                return self._cache[whatsapp_numero]
-            tenant = await self._buscar_tenant_por_numero(whatsapp_numero)
+            cache_key = whatsapp_numero or instance_name
+            if usar_cache and cache_key and cache_key in self._cache:
+                return self._cache[cache_key]
+
+            # Tentar buscar por número primeiro
+            tenant = None
+            if whatsapp_numero:
+                tenant = await self._buscar_tenant_por_numero(whatsapp_numero)
+
+            # Se não encontrou e tem instance_name, buscar por instância
+            if not tenant and instance_name:
+                tenant = await self._buscar_tenant_por_instancia(instance_name)
+
             if not tenant:
-                logger.warning(f"Tenant não encontrado: {whatsapp_numero}")
+                logger.warning(f"Tenant não encontrado: numero={whatsapp_numero}, instance={instance_name}")
                 return None
+
             tenant_context = await self._carregar_configuracoes_completas(tenant)
-            self._cache[whatsapp_numero] = tenant_context
+            if cache_key:
+                self._cache[cache_key] = tenant_context
             return tenant_context
         except Exception as e:
             logger.error(f"Erro ao identificar tenant: {e}", exc_info=True)
@@ -51,6 +63,22 @@ class TenantResolver:
             return None
         except Exception as e:
             logger.error(f"Erro buscar tenant: {e}", exc_info=True)
+            return None
+
+    async def _buscar_tenant_por_instancia(self, instance_name: str) -> Optional[TenantModel]:
+        """
+        Busca tenant pelo nome da instância Evolution API (whatsapp_sender_id).
+        """
+        try:
+            response = self.supabase.client.table("tenants").select("*").eq("whatsapp_sender_id", instance_name).eq("ativo", True).execute()
+
+            # Verificar se response é válido e tem dados
+            if response and response.data and len(response.data) > 0:
+                return TenantModel(**response.data[0])
+
+            return None
+        except Exception as e:
+            logger.error(f"Erro buscar tenant por instância: {e}", exc_info=True)
             return None
 
     async def _carregar_configuracoes_completas(self, tenant: TenantModel) -> TenantContext:
